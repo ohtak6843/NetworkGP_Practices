@@ -6,6 +6,12 @@
 COORD finalCurPos;
 CRITICAL_SECTION cs;
 
+void gotoxy(int x, int y)
+{
+	COORD pos = { (short)x, (short)y };
+	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
+}
+
 void gotoxy(COORD pos)
 {
 	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
@@ -41,29 +47,42 @@ DWORD WINAPI ProcessClient(LPVOID arg)
 	// 파일명 크기 받기
 	retval = recv(client_sock, (char*)&len, sizeof(int), MSG_WAITALL);
 	if (retval == SOCKET_ERROR) {
+		EnterCriticalSection(&cs);
 		err_display("recv()");
+		LeaveCriticalSection(&cs);
 	}
 
 	// 파일명 크기만큼 받기
 	retval = recv(client_sock, fileName, len, MSG_WAITALL);
 	if (retval == SOCKET_ERROR) {
+		EnterCriticalSection(&cs);
 		err_display("recv()");
+		LeaveCriticalSection(&cs);
 	}
 
+	EnterCriticalSection(&cs);
 	printf("받을 파일 이름 : %s\n", fileName);
+	LeaveCriticalSection(&cs);
 
 	// 전송 받을 데이터 크기 받기
 	int totalBytes;
 	retval = recv(client_sock, (char*)&totalBytes, sizeof(totalBytes), MSG_WAITALL);
 	if (retval == SOCKET_ERROR) {
+		EnterCriticalSection(&cs);
 		err_display("recv()");
+		LeaveCriticalSection(&cs);
 	}
+
+	EnterCriticalSection(&cs);
 	printf("받을 데이터 크기: %d\n", totalBytes);
+	LeaveCriticalSection(&cs);
 
 	// 파일 열기
 	FILE* fp = fopen(fileName, "wb");
 	if (fp == NULL) {
+		EnterCriticalSection(&cs);
 		printf("파일 입출력 오류\n");
+		LeaveCriticalSection(&cs);
 	}
 
 	// 파일 데이터 받기
@@ -75,14 +94,18 @@ DWORD WINAPI ProcessClient(LPVOID arg)
 		// 받을 파일의 데이터 크기 받기
 		retval = recv(client_sock, (char*)&len, sizeof(int), MSG_WAITALL);
 		if (retval == SOCKET_ERROR) {
+			EnterCriticalSection(&cs);
 			err_display("recv()");
+			LeaveCriticalSection(&cs);
 			break;
 		}
 
 		// 받을 데이터 크기만큼 데이터 받기
 		retval = recv(client_sock, buf, len, MSG_WAITALL);
 		if (retval == SOCKET_ERROR) {
+			EnterCriticalSection(&cs);
 			err_display("recv()");
+			LeaveCriticalSection(&cs);
 			break;
 		}
 		else if (retval == 0) {
@@ -91,14 +114,15 @@ DWORD WINAPI ProcessClient(LPVOID arg)
 		else {
 			fwrite(buf, 1, retval, fp);
 			if (ferror(fp)) {
+				EnterCriticalSection(&cs);
 				printf("파일 입출력 오류\n");
+				LeaveCriticalSection(&cs);
 				break;
 			}
 			numTotal += retval;
 		}
 
 		EnterCriticalSection(&cs);
-		// 처음 전송률 출력 시
 		if (first) {
 			first = !first;
 			printCurPos = getxy();
@@ -107,23 +131,27 @@ DWORD WINAPI ProcessClient(LPVOID arg)
 		else {
 			finalCurPos = getxy();
 			gotoxy(printCurPos);
-			printf("%s 파일 전송률 %lf%%", fileName, double(numTotal) / totalBytes * 100);
+			printf("%s 파일 전송률 %lf%%\n", fileName, double(numTotal) / totalBytes * 100);
 			gotoxy(finalCurPos);
 		}
 		LeaveCriticalSection(&cs);
 	}
 
 	// 전송 결과 출력
+	EnterCriticalSection(&cs);
 	if (numTotal == totalBytes)
-		printf("파일 전송 완료\n");
+		printf("%s 파일 전송 완료\n", fileName);
 	else
-		printf("파일 전송 실패\n");
+		printf("%s 파일 전송 실패\n", fileName);
 	fclose(fp);
+	LeaveCriticalSection(&cs);
 
 	// 소켓 닫기
 	closesocket(client_sock);
-	printf("[TCP 서버] 클라이언트 종료: IP 주소=%s, 포트 번호=%d\n",
+	EnterCriticalSection(&cs);
+	printf("\n[TCP 서버] 클라이언트 종료: IP 주소=%s, 포트 번호=%d\n",
 		addr, ntohs(clientaddr.sin_port));
+	LeaveCriticalSection(&cs);
 
 	return 0;
 }
@@ -169,15 +197,19 @@ int main(int argc, char* argv[])
 		addrlen = sizeof(clientaddr);
 		client_sock = accept(listen_sock, (struct sockaddr*)&clientaddr, &addrlen);
 		if (client_sock == INVALID_SOCKET) {
+			EnterCriticalSection(&cs);
 			err_display("accept()");
+			LeaveCriticalSection(&cs);
 			break;
 		}
 
 		// 접속한 클라이언트 정보 출력
 		char addr[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &clientaddr.sin_addr, addr, sizeof(addr));
+		EnterCriticalSection(&cs);
 		printf("\n[TCP 서버] 클라이언트 접속: IP 주소=%s, 포트 번호=%d\n",
 			addr, ntohs(clientaddr.sin_port));
+		LeaveCriticalSection(&cs);
 
 		// 스레드 생성
 		hThread = CreateThread(NULL, 0, ProcessClient,
