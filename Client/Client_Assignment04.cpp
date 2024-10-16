@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
 			printf("\n파일 전송 완료: %d 바이트\n", numTotal);
 			break;
 		}
-		
+
 		else {
 			printf("파일 입출력 오류\n");
 			break;

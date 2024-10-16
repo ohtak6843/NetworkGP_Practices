@@ -13,13 +13,22 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="소스 파일\Assignments">
+      <UniqueIdentifier>{f5b944b9-7c5a-42de-a150-1c6b6a1ecd6b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Practices">
+      <UniqueIdentifier>{2cddf9f7-b102-4a09-b719-d90219546d44}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Client.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
     <ClCompile Include="Client_Assignment03.cpp">
-      <Filter>소스 파일</Filter>
+      <Filter>소스 파일\Assignments</Filter>
+    </ClCompile>
+    <ClCompile Include="Client_Assignment04.cpp">
+      <Filter>소스 파일\Assignments</Filter>
+    </ClCompile>
+    <ClCompile Include="Client.cpp">
+      <Filter>소스 파일\Practices</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
