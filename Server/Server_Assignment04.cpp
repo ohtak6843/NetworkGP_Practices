@@ -3,6 +3,21 @@
 #define SERVERPORT 9000
 #define BUFSIZE    512
 
+COORD finalCurPos;
+CRITICAL_SECTION cs;
+
+void gotoxy(COORD pos)
+{
+	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
+}
+
+COORD getxy()
+{
+	CONSOLE_SCREEN_BUFFER_INFO csbi;
+	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+	return csbi.dwCursorPosition;
+}
+
 DWORD WINAPI ProcessClient(LPVOID arg)
 {
 	int retval;
@@ -18,23 +33,54 @@ DWORD WINAPI ProcessClient(LPVOID arg)
 	getpeername(client_sock, (struct sockaddr*)&clientaddr, &addrlen);
 	inet_ntop(AF_INET, &clientaddr.sin_addr, addr, sizeof(addr));
 
-	while (1) {
-		// 파일 이름
-		char fileName[256];
-		memset(&fileName, 0, sizeof(fileName));
 
-		// 파일명 크기 받기
+	// 파일 이름
+	char fileName[256];
+	memset(&fileName, 0, sizeof(fileName));
+
+	// 파일명 크기 받기
+	retval = recv(client_sock, (char*)&len, sizeof(int), MSG_WAITALL);
+	if (retval == SOCKET_ERROR) {
+		err_display("recv()");
+	}
+
+	// 파일명 크기만큼 받기
+	retval = recv(client_sock, fileName, len, MSG_WAITALL);
+	if (retval == SOCKET_ERROR) {
+		err_display("recv()");
+	}
+
+	printf("받을 파일 이름 : %s\n", fileName);
+
+	// 전송 받을 데이터 크기 받기
+	int totalBytes;
+	retval = recv(client_sock, (char*)&totalBytes, sizeof(totalBytes), MSG_WAITALL);
+	if (retval == SOCKET_ERROR) {
+		err_display("recv()");
+	}
+	printf("받을 데이터 크기: %d\n", totalBytes);
+
+	// 파일 열기
+	FILE* fp = fopen(fileName, "wb");
+	if (fp == NULL) {
+		printf("파일 입출력 오류\n");
+	}
+
+	// 파일 데이터 받기
+	int numTotal = 0;
+	bool first = true;
+	COORD printCurPos;
+	while (1)
+	{
+		// 받을 파일의 데이터 크기 받기
 		retval = recv(client_sock, (char*)&len, sizeof(int), MSG_WAITALL);
 		if (retval == SOCKET_ERROR) {
 			err_display("recv()");
 			break;
 		}
-		else if (retval == 0) {
-			break;
-		}
 
-		// 파일명 크기만큼 받기
-		retval = recv(client_sock, fileName, len, MSG_WAITALL);
+		// 받을 데이터 크기만큼 데이터 받기
+		retval = recv(client_sock, buf, len, MSG_WAITALL);
 		if (retval == SOCKET_ERROR) {
 			err_display("recv()");
 			break;
@@ -42,66 +88,37 @@ DWORD WINAPI ProcessClient(LPVOID arg)
 		else if (retval == 0) {
 			break;
 		}
-
-		printf("받을 파일 이름 : %s\n", fileName);
-
-		// 전송 받을 데이터 크기 받기
-		int totalBytes;
-		retval = recv(client_sock, (char*)&totalBytes, sizeof(totalBytes), MSG_WAITALL);
-		if (retval == SOCKET_ERROR) {
-			err_display("recv()");
-			closesocket(client_sock);
-			continue;
-		}
-		printf("받을 데이터 크기: %d\n", totalBytes);
-
-		// 파일 열기
-		FILE* fp = fopen(fileName, "wb");
-		if (fp == NULL) {
-			printf("파일 입출력 오류\n");
-			closesocket(client_sock);
-			continue;
-		}
-
-		// 파일 데이터 받기
-		int numTotal = 0;
-		while (1)
-		{
-			// 받을 파일의 데이터 크기 받기
-			retval = recv(client_sock, (char*)&len, sizeof(int), MSG_WAITALL);
-			if (retval == SOCKET_ERROR) {
-				err_display("recv()");
+		else {
+			fwrite(buf, 1, retval, fp);
+			if (ferror(fp)) {
+				printf("파일 입출력 오류\n");
 				break;
 			}
-
-			// 받을 데이터 크기만큼 데이터 받기
-			retval = recv(client_sock, buf, len, MSG_WAITALL);
-			if (retval == SOCKET_ERROR) {
-				err_display("recv()");
-				break;
-			}
-			else if (retval == 0) {
-				break;
-			}
-			else {
-				fwrite(buf, 1, retval, fp);
-				if (ferror(fp)) {
-					printf("파일 입출력 오류\n");
-					break;
-				}
-				numTotal += retval;
-			}
-
-			//printf("\r%lf%%", double(numTotal) / totalBytes * 100);
+			numTotal += retval;
 		}
-		fclose(fp);
 
-		// 전송 결과 출력
-		if (numTotal == totalBytes)
-			printf(" 파일 전송 완료\n");
-		else
-			printf(" 파일 전송 실패\n");
+		EnterCriticalSection(&cs);
+		// 처음 전송률 출력 시
+		if (first) {
+			first = !first;
+			printCurPos = getxy();
+			printf("%s 파일 전송률 %lf%%\n", fileName, double(numTotal) / totalBytes * 100);
+		}
+		else {
+			finalCurPos = getxy();
+			gotoxy(printCurPos);
+			printf("%s 파일 전송률 %lf%%", fileName, double(numTotal) / totalBytes * 100);
+			gotoxy(finalCurPos);
+		}
+		LeaveCriticalSection(&cs);
 	}
+
+	// 전송 결과 출력
+	if (numTotal == totalBytes)
+		printf("파일 전송 완료\n");
+	else
+		printf("파일 전송 실패\n");
+	fclose(fp);
 
 	// 소켓 닫기
 	closesocket(client_sock);
@@ -144,6 +161,9 @@ int main(int argc, char* argv[])
 
 	HANDLE hThread;
 
+	// 임계 영역 초기화
+	InitializeCriticalSection(&cs);
+
 	while (1) {
 		// accept()
 		addrlen = sizeof(clientaddr);
@@ -165,6 +185,9 @@ int main(int argc, char* argv[])
 		if (hThread == NULL) { closesocket(client_sock); }
 		else { CloseHandle(hThread); }
 	}
+
+	// 임계 영역 삭제
+	DeleteCriticalSection(&cs);
 
 	// 소켓 닫기
 	closesocket(listen_sock);
