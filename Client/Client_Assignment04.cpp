@@ -1,18 +1,19 @@
 #include "Common.h"
 
-char* SERVERIP = (char*)"127.0.0.1";
+char* SERVERIP;
 #define SERVERPORT 9000
 #define BUFSIZE    50
 
 int main(int argc, char* argv[])
 {
-	if (argc <= 1) {
-		printf("파일명이 입력되지 않았습니다.\n");
+	if (argc <= 2) {
+		printf("인자가 모두 입력되지 않았습니다.\n");
 		return 0;
 	}
 
 	int retval;
-	const char* fileName = argv[1];
+	const char* fileName = argv[2];
+	SERVERIP = argv[1];
 	int fileLen = strlen(fileName);
 
 	// 윈속 초기화
